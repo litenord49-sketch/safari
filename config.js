@@ -1,0 +1,3 @@
+// Generado por generar_config_web.py desde supabase_config.txt
+window.SUPABASE_URL = 'https://whmgvfuohwyftdyobhdw.supabase.co';
+window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndobWd2ZnVvaHd5ZnRkeW9iaGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODA4ODEsImV4cCI6MjA4ODg1Njg4MX0.UYGUAXHPYV8ZnipQW3Ue8f-UGAJHbn9j162iQ7KGlrA';

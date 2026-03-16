@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tiempos Safari - En vivo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", "SF Pro Display", system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a472a 0%, #2d5a3d 50%, #1e3d2b 100%);
+      margin: 0;
+      padding: 24px;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+    .contenedor {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin: 0 0 8px 0;
+      color: #fff;
+      font-size: 1.8rem;
+      font-weight: 700;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    .subtitulo {
+      text-align: center;
+      color: rgba(255,255,255,0.85);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+    }
+    .actualizado {
+      text-align: center;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 20px;
+    }
+    .error-config {
+      background: #ffebee;
+      color: #c62828;
+      padding: 14px;
+      border-radius: 10px;
+      max-width: 500px;
+      margin: 0 auto 20px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .selector-parte {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .selector-parte button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .selector-parte button:hover {
+      background: rgba(255,255,255,0.35);
+    }
+    .selector-parte button.activo {
+      background: #fff;
+      color: #1a472a;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .tabla-clase {
+      margin-bottom: 28px;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    .tabla-clase h2 {
+      margin: 0;
+      padding: 14px 20px;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #1a472a;
+      background: linear-gradient(90deg, #e8f5e9 0%, #f1f8e9 100%);
+      border-bottom: 2px solid #2e7d32;
+    }
+    .tabla-clase table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .tabla-clase th {
+      background: #2e7d32;
+      color: #fff;
+      font-weight: 600;
+      padding: 14px 12px;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+    .tabla-clase td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #eee;
+    }
+    .tabla-clase tr:nth-child(even) td { background: #f5f5f5; }
+    .tabla-clase tr:last-child td { border-bottom: none; }
+    .tabla-clase td.numero-auto { font-weight: 600; color: #1a472a; }
+    .sin-datos {
+      text-align: center;
+      padding: 32px 20px;
+      color: #666;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
+    <h1>🏁 Tiempos Safari</h1>
+    <p class="subtitulo">Tiempos en vivo por clase y parte de carrera</p>
+    <p class="actualizado" id="actualizado">Cargando…</p>
+    <div class="error-config" id="error-config" style="display: none;"></div>
+    <div class="selector-parte" id="selector-parte"></div>
+    <div id="tablas-por-clase"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const CLASES = ["850 std", "850", "1.4", "1.6"];
+    const PARTES = ["Clasificación", "Serie", "Final"];
+    const url = window.SUPABASE_URL || "";
+    const key = window.SUPABASE_ANON_KEY || "";
+    const elActualizado = document.getElementById("actualizado");
+    const elError = document.getElementById("error-config");
+    const elSelectorParte = document.getElementById("selector-parte");
+    const contenedorTablas = document.getElementById("tablas-por-clase");
+
+    let parteVista = PARTES[0];
+    let datosPorParte = {}; // parte -> clase -> nro -> [vueltas]
+
+    if (!url || !key || url.includes("TU_PROYECTO") || key.includes("tu_anon_key")) {
+      elError.textContent = "Configurá config.js con tu SUPABASE_URL y SUPABASE_ANON_KEY (copiá config.example.js a config.js).";
+      elError.style.display = "block";
+      elActualizado.textContent = "";
+    } else {
+      const supabase = window.supabase.createClient(url, key);
+
+      function formatoTiempo(segundos) {
+        if (segundos == null) return "—";
+        const min = Math.floor(segundos / 60);
+        const seg = Math.floor(segundos % 60);
+        const dec = Math.floor((segundos % 1) * 10);
+        return min + " min " + seg + "." + dec + " s";
+      }
+
+      function ordenAutos(a, b) {
+        const na = parseInt(a, 10), nb = parseInt(b, 10);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return String(a).localeCompare(String(b));
+      }
+
+      function dibujarTablaEn(contenedor, datos) {
+        const autos = Object.keys(datos).sort(ordenAutos);
+        let maxVueltas = 3;
+        autos.forEach(function(n) {
+          if (datos[n].length > maxVueltas) maxVueltas = datos[n].length;
+        });
+        let html = "<table><thead><tr><th>n° auto</th>";
+        for (let i = 1; i <= maxVueltas; i++) {
+          html += "<th>vuelta " + i + "</th>";
+        }
+        html += "</tr></thead><tbody>";
+        if (autos.length === 0) {
+          html += "<tr><td colspan='" + (maxVueltas + 1) + "' class='sin-datos'>Aún no hay tiempos en esta clase.</td></tr>";
+        } else {
+          autos.forEach(function(nro) {
+            const vueltas = datos[nro];
+            html += "<tr><td class='numero-auto'>" + nro + "</td>";
+            for (let i = 0; i < maxVueltas; i++) {
+              html += "<td>" + formatoTiempo(vueltas[i]) + "</td>";
+            }
+            html += "</tr>";
+          });
+        }
+        html += "</tbody></table>";
+        contenedor.innerHTML = html;
+      }
+
+      function dibujarSelectorParte() {
+        elSelectorParte.innerHTML = "";
+        PARTES.forEach(function(p) {
+          const btn = document.createElement("button");
+          btn.textContent = p;
+          btn.type = "button";
+          if (p === parteVista) btn.className = "activo";
+          btn.addEventListener("click", function() {
+            parteVista = p;
+            dibujarSelectorParte();
+            dibujarTablasParte();
+          });
+          elSelectorParte.appendChild(btn);
+        });
+      }
+
+      function dibujarTablasParte() {
+        contenedorTablas.innerHTML = "";
+        const porClase = datosPorParte[parteVista] || {};
+        PARTES.forEach(function(p) { if (!datosPorParte[p]) datosPorParte[p] = {}; });
+        CLASES.forEach(function(clase) {
+          const datos = porClase[clase] || {};
+          const section = document.createElement("div");
+          section.className = "tabla-clase";
+          const h2 = document.createElement("h2");
+          h2.textContent = "Clase " + clase;
+          section.appendChild(h2);
+          const divTabla = document.createElement("div");
+          section.appendChild(divTabla);
+          dibujarTablaEn(divTabla, datos);
+          contenedorTablas.appendChild(section);
+        });
+      }
+
+      function cargar() {
+        supabase.from("vueltas").select("numero_auto, clase, parte, numero_vuelta, tiempo_segundos").order("created_at", { ascending: true })
+          .then(function(res) {
+            if (res.error) {
+              elActualizado.textContent = "Error: " + res.error.message;
+              return;
+            }
+            const porParte = {};
+            (res.data || []).forEach(function(row) {
+              const parte = row.parte || "Clasificación";
+              const c = row.clase || "850 std";
+              if (!porParte[parte]) porParte[parte] = {};
+              if (!porParte[parte][c]) porParte[parte][c] = {};
+              const n = row.numero_auto;
+              if (!porParte[parte][c][n]) porParte[parte][c][n] = [];
+              porParte[parte][c][n][row.numero_vuelta - 1] = row.tiempo_segundos;
+            });
+            datosPorParte = porParte;
+            if (Object.keys(datosPorParte).length && !datosPorParte[parteVista]) {
+              parteVista = Object.keys(datosPorParte)[0];
+            }
+            dibujarSelectorParte();
+            dibujarTablasParte();
+            elActualizado.textContent = "Última actualización: " + new Date().toLocaleTimeString("es-AR") + " (se actualiza cada 3 s)";
+          });
+      }
+
+      cargar();
+      setInterval(cargar, 3000);
+    }
+  </script>
+</body>
+</html>
